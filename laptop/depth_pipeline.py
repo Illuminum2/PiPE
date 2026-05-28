@@ -2,6 +2,17 @@ import cv2
 import numpy
 from PIL import Image
 from transformers import pipeline
+import argparse
+
+from client import frames_from_pi
+
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--host", default="10.55.0.1", help="pi ethernet host")
+parser.add_argument("--port", default="5555", type=int, help="pi ethernet port")
+parser.add_argument("--flip", action="store_false", help="flip image")
+args = parser.parse_args()
+
 
 face_cascade = cv2.CascadeClassifier("./models/frontalface.xml")
 
@@ -12,7 +23,6 @@ pipe = pipeline(
     device='mps'
 )
 
-cam = cv2.VideoCapture(0)
 
 # Detect faces with haar cascades
 def detect_faces(img):
@@ -42,7 +52,8 @@ def draw_face_centers(img, face_center):
     for (x, y) in face_center:
         cv2.circle(center_img, center=(int(x), int(y)), radius=10, color=(0, 0, 255), thickness=cv2.FILLED)
 
-    return center_img;
+    return center_img
+
 
 # Estimate monocular depth from frame
 def depth_estimation(img):
@@ -55,22 +66,29 @@ def depth_estimation(img):
     # Convert depth result to CV2 format
     return numpy.array(result['depth'])
 
-while True:
-    ret, frame = cam.read()
-    cam_img = cv2.flip(frame, 1)
 
-    face_rect = detect_faces(cam_img)
-    face_center = calculate_face_centers(face_rect)
-    depth_img = depth_estimation(cam_img)
+def main():
+    try:
+        for frame in frames_from_pi(args.host, args.port):
+            if args.flip:
+                frame = cv2.flip(frame, 1)
 
-    final_img = draw_face_rects(depth_img, face_rect)
-    final_img = draw_face_centers(final_img, face_center)
+            face_rect = detect_faces(frame)
+            face_center = calculate_face_centers(face_rect)
+            depth_img = depth_estimation(frame)
 
-    # Display depth result
-    cv2.imshow('Depth', final_img)
+            final_img = draw_face_rects(depth_img, face_rect)
+            final_img = draw_face_centers(final_img, face_center)
 
-    if cv2.waitKey(1) == ord('q'):
-        break
+            # Display depth result and original frame
+            cv2.imshow("Depth", final_img)
+            cv2.imshow("Pi Camera", frame)
 
-cam.release()
-cv2.destroyAllWindows()
+            if cv2.waitKey(1) == ord('q'):
+                break
+
+    finally:
+        cv2.destroyAllWindows()
+
+if __name__ == "__main__":
+    main()

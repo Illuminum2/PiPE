@@ -1,4 +1,4 @@
 # Fix bug with wrong directory
 cd "$(dirname "$0")"
 
-.venv/bin/python client.py
+.venv/bin/python depth_pipeline.py
