@@ -42,7 +42,7 @@ def draw_face_rects(img, face_rect):
     rect_img = img.copy()
 
     for (x, y, w, h) in face_rect:
-        cv2.rectangle(rect_img, (x, y), (x + w, y + h), (0, 0, 255), 10)
+        cv2.rectangle(rect_img, pt1=(x, y), pt2=(x + w, y + h), color=(0, 0, 0), thickness=10)
 
     return rect_img
 
@@ -50,7 +50,7 @@ def draw_face_centers(img, face_center):
     center_img = img.copy()
 
     for (x, y) in face_center:
-        cv2.circle(center_img, center=(int(x), int(y)), radius=10, color=(0, 0, 255), thickness=cv2.FILLED)
+        cv2.circle(center_img, center=(int(x), int(y)), radius=10, color=(0, 0, 0), thickness=cv2.FILLED)
 
     return center_img
 
@@ -79,6 +79,8 @@ def main():
 
             final_img = draw_face_rects(depth_img, face_rect)
             final_img = draw_face_centers(final_img, face_center)
+
+            final_img = cv2.applyColorMap(final_img, cv2.COLORMAP_INFERNO)
 
             # Display depth result and original frame
             cv2.imshow("Depth", final_img)
