@@ -1,0 +1,4 @@
+# Fix bug with wrong directory
+cd "$(dirname "$0")"
+
+python3 camera_server.py
