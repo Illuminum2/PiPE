@@ -1,4 +1,5 @@
 # Fix bug with wrong directory
 cd "$(dirname "$0")"
 
-.venv/bin/python depth_pipeline.py
+source .venv/bin/activate
+uvicorn position_api:app --host 0.0.0.0 --port 8000
