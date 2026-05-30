@@ -33,6 +33,8 @@ def positions_to_data(face_centers, face_depths):
     data = []
 
     for (x, y), z in zip(face_centers, face_depths):
+        x, y, z = fix_pos(x, y, z)
+
         data.append({
             'x': x,
             'y': y,
@@ -41,3 +43,14 @@ def positions_to_data(face_centers, face_depths):
         })
 
     return data
+
+def fix_pos(x, y, z):
+    x = (x / 640) * (640 / 1000)
+    y = (y / 360) * (360 / 1000)
+
+    x += (1 - (640 / 1000)) / 2
+    y += (1 - (360 / 1000)) / 2
+
+    z = z / 3
+
+    return x, y, z
