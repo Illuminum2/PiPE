@@ -37,7 +37,7 @@ def positions_to_data(face_centers, face_depths):
             'x': x,
             'y': y,
             'z': z,
-            'timestamp': time.time()
+            'timestamp': round(time.time(), 2)
         })
 
     return data
