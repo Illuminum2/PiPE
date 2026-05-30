@@ -10,7 +10,7 @@ app = FastAPI()
 address = "10.10.0.85:8000"
 
 
-@app.websocket("/stream/coordinates")
+@app.websocket("/api/stream/coordinates")
 async def websocket_coordinates(websocket: WebSocket):
     await websocket.accept()
 
