@@ -4,14 +4,7 @@ from PIL import Image
 from transformers import pipeline
 import argparse
 
-from client import frames_from_pi
-
-
-parser = argparse.ArgumentParser()
-parser.add_argument("--host", default="10.55.0.1", help="pi ethernet host")
-parser.add_argument("--port", default="5555", type=int, help="pi ethernet port")
-parser.add_argument("--flip", action="store_false", help="flip image")
-args = parser.parse_args()
+from client import PI_HOST, PI_PORT, frames_from_pi
 
 
 face_cascade = cv2.CascadeClassifier("./models/frontalface.xml")
@@ -133,6 +126,12 @@ def calculate_face_depths(depth_img, face_rect, margin):
 
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--host", default=PI_HOST, help="pi ethernet host")
+    parser.add_argument("--port", default=PI_PORT, type=int, help="pi ethernet port")
+    parser.add_argument("--flip", action="store_true", help="flip image")
+    args = parser.parse_args()
+
     calibration_patch_depth = None
     patch_size = 16
     patch_margin = 0.08

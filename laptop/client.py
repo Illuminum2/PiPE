@@ -3,7 +3,11 @@ import numpy as np
 import zmq
 
 
-def frames_from_pi(host, port):
+PI_HOST = "10.55.0.1"
+PI_PORT = 5555
+
+
+def frames_from_pi(host=PI_HOST, port=PI_PORT):
     ctx = zmq.Context()
     sock = ctx.socket(zmq.SUB)  # zmq subscriber mode
     sock.setsockopt(zmq.CONFLATE, 1)  # limit receive queue to only the latest element

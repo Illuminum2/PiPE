@@ -4,17 +4,16 @@ from picamera2 import Picamera2
 import argparse
 
 
-parser = argparse.ArgumentParser()
-parser.add_argument("--host", default="10.55.0.1", help="pi host")
-parser.add_argument("--port", default="5555", help="pi port")
-parser.add_argument("--width", type=int, default=640, help="camera width")
-parser.add_argument("--height", type=int, default=360, help="camera height")
-parser.add_argument("--fps", type=int, default=30, help="camera fps")
-parser.add_argument("--quality", type=int, default=45, help="camera jpg quality")
-args = parser.parse_args()
-
-
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--host", default="10.55.0.1", help="pi host")
+    parser.add_argument("--port", type=int, default=5555, help="pi port")
+    parser.add_argument("--width", type=int, default=640, help="camera width")
+    parser.add_argument("--height", type=int, default=360, help="camera height")
+    parser.add_argument("--fps", type=int, default=30, help="camera fps")
+    parser.add_argument("--quality", type=int, default=45, help="camera jpg quality")
+    args = parser.parse_args()
+
     cam = Picamera2()
     cam.configure(
         cam.create_video_configuration(

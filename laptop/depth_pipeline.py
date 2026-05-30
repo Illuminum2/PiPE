@@ -2,20 +2,8 @@ import cv2
 import numpy
 from PIL import Image
 from transformers import pipeline
-import argparse
 
-from client import frames_from_pi
-
-
-# parser = argparse.ArgumentParser()
-# parser.add_argument("--host", default="10.55.0.1", help="pi ethernet host")
-# parser.add_argument("--port", default="5555", type=int, help="pi ethernet port")
-# parser.add_argument("--flip", action="store_false", help="flip image")
-# args = parser.parse_args()
-
-ARGS_HOST = "10.55.0.1"
-ARGS_PORT = 5555
-ARGS_FLIP = False
+from client import frames_from_pi, PI_HOST, PI_PORT
 
 
 face_cascade = cv2.CascadeClassifier("./models/frontalface.xml")
@@ -134,15 +122,15 @@ def draw_face_centers(img, face_centers):
     return center_img
 
 
-def people_positions():
+def people_positions(host=PI_HOST, port=PI_PORT, flip=False):
     calibration_patch_depth = None
     patch_size = 16
     patch_margin = 0.08
 
     face_margin = 0.1
 
-    for frame_img in frames_from_pi(ARGS_HOST, ARGS_PORT):
-        if ARGS_FLIP:
+    for frame_img in frames_from_pi(host, port):
+        if flip:
             frame_img = cv2.flip(frame_img, 1)
 
         face_rects = detect_faces(frame_img)
