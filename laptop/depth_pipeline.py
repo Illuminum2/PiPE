@@ -15,6 +15,23 @@ pipe = pipeline(
     device='mps'
 )
 
+calibration_patch_depth = None
+patch_size = 16
+patch_margin = 0.08
+face_margin = 0.1
+
+
+def read_depth_frame(frame_img, flip=False):
+    if flip:
+        frame_img = cv2.flip(frame_img, 1)
+
+    face_rects = detect_faces(frame_img)
+    face_centers = calculate_face_centers(face_rects)
+
+    depth_img, raw_depth = depth_estimation(frame_img)
+
+    return face_rects, face_centers, raw_depth
+
 
 # Detect faces with haar cascades
 def detect_faces(img):
@@ -45,6 +62,26 @@ def depth_estimation(img):
     raw_depth = result['predicted_depth'].cpu().numpy()
 
     return depth_img, raw_depth
+
+
+def calculate_base_calibration(host=PI_HOST, port=PI_PORT, flip=False):
+    global calibration_patch_depth
+
+    frames = frames_from_pi(host, port)
+
+    try:
+        for frame_img in frames:
+            face_rects, face_centers, raw_depth = read_depth_frame(frame_img, flip)
+
+            if len(face_rects) > 0:
+                return False, "Person in frame."
+
+            calibration_patch_depth = calculate_patch_depths(raw_depth, patch_size, patch_margin)
+
+            return True, "Calibrated."
+
+    finally:
+        frames.close()
 
 def calculate_patch_depths(depth_img, patch_size, margin):
     img_h, img_w = depth_img.shape[:2]
@@ -104,44 +141,19 @@ def calculate_face_depths(depth_img, face_rect, margin):
     return face_depths
 
 
-# Draw face rectangles on image
-def draw_face_rects(img, face_rects):
-    rect_img = img.copy()
-
-    for (x, y, w, h) in face_rects:
-        cv2.rectangle(rect_img, pt1=(x, y), pt2=(x + w, y + h), color=(0, 0, 0), thickness=10)
-
-    return rect_img
-
-def draw_face_centers(img, face_centers):
-    center_img = img.copy()
-
-    for (x, y) in face_centers:
-        cv2.circle(center_img, center=(int(x), int(y)), radius=10, color=(0, 0, 0), thickness=cv2.FILLED)
-
-    return center_img
-
-
 def people_positions(host=PI_HOST, port=PI_PORT, flip=False):
-    calibration_patch_depth = None
-    patch_size = 16
-    patch_margin = 0.08
+    if calibration_patch_depth is None:
+        raise RuntimeError("Not calibrated.")
 
-    face_margin = 0.1
+    frames = frames_from_pi(host, port)
+    try:
+        for frame_img in frames:
+            face_rects, face_centers, raw_depth = read_depth_frame(frame_img, flip)
 
-    for frame_img in frames_from_pi(host, port):
-        if flip:
-            frame_img = cv2.flip(frame_img, 1)
+            corrected_depth_img = correct_depth_img(raw_depth, calibration_patch_depth, patch_size, patch_margin)
+            face_depths = calculate_face_depths(corrected_depth_img, face_rects, face_margin)
 
-        face_rects = detect_faces(frame_img)
-        face_centers = calculate_face_centers(face_rects)
+            yield face_centers, face_depths
 
-        depth_img, raw_depth = depth_estimation(frame_img)
-
-        if calibration_patch_depth is None:
-            calibration_patch_depth = calculate_patch_depths(raw_depth, patch_size, patch_margin)
-
-        corrected_depth_img = correct_depth_img(raw_depth, calibration_patch_depth, patch_size, patch_margin)
-        face_depths = calculate_face_depths(corrected_depth_img, face_rects, face_margin)
-
-        yield face_centers, face_depths
+    finally:
+        frames.close()

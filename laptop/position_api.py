@@ -3,14 +3,24 @@ from fastapi.websockets import WebSocketDisconnect
 import asyncio
 import time
 
-from depth_pipeline import people_positions
+from depth_pipeline import calculate_base_calibration, people_positions
 
 
 app = FastAPI()
 address = "10.10.0.85:8000"
 
 
-@app.websocket("/api/stream/coordinates")
+@app.post("/api/coordinates/calibrate")
+async def calibrate_coordinates():
+    calibrated, message = await asyncio.to_thread(calculate_base_calibration)
+
+    return {
+        'calibrated': calibrated,
+        'message': message
+    }
+
+
+@app.websocket("/api/coordinates/stream")
 async def websocket_coordinates(websocket: WebSocket):
     await websocket.accept()
     positions = people_positions()
@@ -25,6 +35,10 @@ async def websocket_coordinates(websocket: WebSocket):
 
     except WebSocketDisconnect:
         pass
+    except RuntimeError as error:
+        await websocket.send_json({
+            'message': error
+        })
     finally:
         positions.close()
 
