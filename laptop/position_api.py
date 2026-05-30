@@ -13,17 +13,20 @@ address = "10.10.0.85:8000"
 @app.websocket("/api/stream/coordinates")
 async def websocket_coordinates(websocket: WebSocket):
     await websocket.accept()
+    positions = people_positions()
 
     try:
         while True:
             # https://stackoverflow.com/a/65716963
-            face_centers, face_depths = await asyncio.to_thread(next, people_positions())
+            face_centers, face_depths = await asyncio.to_thread(next, positions)
             data = positions_to_data(face_centers, face_depths)
 
             await websocket.send_json(data)
 
     except WebSocketDisconnect:
         pass
+    finally:
+        positions.close()
 
 
 def positions_to_data(face_centers, face_depths):
