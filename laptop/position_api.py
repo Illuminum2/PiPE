@@ -3,21 +3,34 @@ from fastapi.websockets import WebSocketDisconnect
 import asyncio
 import time
 
-from depth_pipeline import calculate_base_calibration, people_positions
+from depth_pipeline import background_calibration, min_depth_calibration, max_depth_calibration
+from depth_pipeline import is_calibrated, people_positions
 
 
 app = FastAPI()
 address = "10.10.0.85:8000"
 
 
-@app.post("/api/coordinates/calibrate")
-async def calibrate_coordinates():
-    calibrated, message = await asyncio.to_thread(calculate_base_calibration)
 
-    return {
-        'calibrated': calibrated,
-        'message': message
-    }
+@app.post("/api/coordinates/calibrate/background")
+async def calibrate_coordinates():
+    calibrated, message = await asyncio.to_thread(background_calibration)
+
+    return calibration_result(calibrated, message)
+
+
+@app.post("/api/coordinates/calibrate/min")
+async def calibrate_min_depth():
+    calibrated, message = await asyncio.to_thread(min_depth_calibration)
+
+    return calibration_result(calibrated, message)
+
+
+@app.post("/api/coordinates/calibrate/max")
+async def calibrate_max_depth():
+    calibrated, message = await asyncio.to_thread(max_depth_calibration)
+
+    return calibration_result(calibrated, message)
 
 
 @app.websocket("/api/coordinates/stream")
@@ -28,8 +41,8 @@ async def websocket_coordinates(websocket: WebSocket):
     try:
         while True:
             # https://stackoverflow.com/a/65716963
-            face_centers, face_depths = await asyncio.to_thread(next, positions)
-            data = positions_to_data(face_centers, face_depths)
+            positions = await asyncio.to_thread(next, positions)
+            data = positions_to_data(positions)
 
             await websocket.send_json(data)
 
@@ -37,18 +50,23 @@ async def websocket_coordinates(websocket: WebSocket):
         pass
     except RuntimeError as error:
         await websocket.send_json({
-            'message': error
+            'message': str(error)
         })
     finally:
         positions.close()
 
 
-def positions_to_data(face_centers, face_depths):
+def calibration_result(calibrated, message):
+    return {
+        'calibrated': calibrated,
+        'message': message
+    }
+
+
+def positions_to_data(positions):
     data = []
 
-    for (x, y), z in zip(face_centers, face_depths):
-        x, y, z = fix_pos(x, y, z)
-
+    for x, y, z in positions:
         data.append({
             'x': x,
             'y': y,
@@ -57,14 +75,3 @@ def positions_to_data(face_centers, face_depths):
         })
 
     return data
-
-def fix_pos(x, y, z):
-    x = (x / 640) * (640 / 1000)
-    y = (y / 360) * (360 / 1000)
-
-    x += (1 - (640 / 1000)) / 2
-    y += (1 - (360 / 1000)) / 2
-
-    z = z / 3
-
-    return x, y, z

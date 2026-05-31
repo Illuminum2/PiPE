@@ -15,37 +15,45 @@ pipe = pipeline(
     device='mps'
 )
 
-calibration_patch_depth = None
+calibration_patches = None
+min_depth = None
+max_depth = None
+
 patch_size = 16
 patch_margin = 0.08
 face_margin = 0.1
 
-
-def read_depth_frame(frame_img, flip=False):
+def process_frame_raw_depth(frame_img, flip=False):
     if flip:
         frame_img = cv2.flip(frame_img, 1)
 
-    face_rects = detect_faces(frame_img)
-    face_centers = calculate_face_centers(face_rects)
+    return depth_estimation(frame_img)
 
-    depth_img, raw_depth = depth_estimation(frame_img)
+def process_frame_full(frame_img, flip=False):
+    raw_depth = process_frame_raw_depth(frame_img, flip)
 
-    return face_rects, face_centers, raw_depth
+    face_rects, face_centers = detect_faces(frame_img)
+    corrected_depth = correct_depth(raw_depth)
+
+    face_depths = calculate_face_depths(corrected_depth, face_rects)
+
+    return face_centers, face_depths
 
 
 # Detect faces with haar cascades
 def detect_faces(img):
     face_img = img.copy()
-    return face_cascade.detectMultiScale(face_img, scaleFactor=1.2, minNeighbors=7)
 
-def calculate_face_centers(face_rects):
+    face_rects = face_cascade.detectMultiScale(face_img, scaleFactor=1.2, minNeighbors=7)
+
     face_centers = []
-
     for (x, y, w, h) in face_rects:
-        face_centers.append((x + w/2, y + h/2))
+        face_centers.append((x + w / 2, y + h / 2))
 
-    return face_centers
+    return face_rects, face_centers
 
+def frame_contains_person(frame_img):
+    return len(detect_faces(frame_img)[0]) > 0
 
 # Estimate monocular depth from frame
 def depth_estimation(img):
@@ -56,38 +64,79 @@ def depth_estimation(img):
     result = pipe(pil_img)
 
     # Normalized display depth
-    depth_img = numpy.array(result['depth'])
+    #depth_img = numpy.array(result['depth'])
 
-    # Depth for calculations
+    # Raw depth for calculations
     raw_depth = result['predicted_depth'].cpu().numpy()
 
-    return depth_img, raw_depth
+    return raw_depth
+
+def correct_depth(raw_depth):
+    current_patches = calculate_patch_depths(raw_depth)
+    correction = []
+
+    for current_patch, calibration_patch in zip(current_patches, calibration_patches):
+        if current_patch != 0:
+            correction.append(calibration_patch / current_patch)
+        else:
+            correction.append(current_patch)
+
+    if len(correction) == 0:
+        return raw_depth
+
+    return raw_depth * float(numpy.median(correction))
+
+def calculate_face_depths(depth, face_rects):
+    face_depths = []
+
+    for (x, y, w, h) in face_rects:
+        x0 = int(x + w * face_margin)
+        x1 = int(x + w * (1 - face_margin))
+        y0 = int(y + h * face_margin)
+        y1 = int(y + h * (1 - face_margin))
+
+        face_area = depth[y0:y1, x0:x1]
+        face_depths.append(float(numpy.median(face_area)))
+
+    return face_depths
+
+def normalize_positions(face_centers, face_depths, frame_img):
+    img_h, img_w = frame_img.shape[:2]
+    positions = []
+
+    for (x, y), z in zip(face_centers, face_depths):
+        if z < min_depth or z > max_depth:
+            continue
+
+        positions.append((
+            x / img_w,
+            y / img_h,
+            (z - min_depth) / (max_depth - min_depth)
+        ))
+
+    return positions
 
 
-def calculate_base_calibration(host=PI_HOST, port=PI_PORT, flip=False):
-    global calibration_patch_depth
+def background_calibration(host=PI_HOST, port=PI_PORT, flip=False):
+    global calibration_patches, min_depth, max_depth
 
-    frames = frames_from_pi(host, port)
+    frame_img = next(frames_from_pi(host, port))
+    raw_depth = process_frame_raw_depth(frame_img, flip)
 
-    try:
-        for frame_img in frames:
-            face_rects, face_centers, raw_depth = read_depth_frame(frame_img, flip)
+    if frame_contains_person(frame_img):
+        return False, "No person must be in frame."
 
-            if len(face_rects) > 0:
-                return False, "Person in frame."
+    calibration_patches = calculate_patch_depths(raw_depth)
+    min_depth = None
+    max_depth = None
 
-            calibration_patch_depth = calculate_patch_depths(raw_depth, patch_size, patch_margin)
+    return True, "Background calibrated."
 
-            return True, "Calibrated."
+def calculate_patch_depths(depth):
+    img_h, img_w = depth.shape[:2]
 
-    finally:
-        frames.close()
-
-def calculate_patch_depths(depth_img, patch_size, margin):
-    img_h, img_w = depth_img.shape[:2]
-
-    margin_x = int(img_w * margin)
-    margin_y = int(img_h * margin)
+    margin_x = int(img_w * patch_margin)
+    margin_y = int(img_h * patch_margin)
 
     usable_w = img_w - margin_x * 2
     usable_h = img_h - margin_y * 2
@@ -98,62 +147,79 @@ def calculate_patch_depths(depth_img, patch_size, margin):
     start_x = margin_x + (usable_w - patch_count_x * patch_size) // 2
     start_y = margin_y + (usable_h - patch_count_y * patch_size) // 2
 
-    patch_depth = []
+    patch_depths = []
 
-    for y_i in range(patch_count_y):
-        for x_i in range(patch_count_x):
-            x = start_x + x_i * patch_size
-            y = start_y + y_i * patch_size
+    for patch_x in range(patch_count_x):
+        for patch_y in range(patch_count_y):
+            x = start_x + patch_x * patch_size
+            y = start_y + patch_y * patch_size
 
-            patch = depth_img[y:y+patch_size, x:x+patch_size]
-            patch_depth.append(float(numpy.median(patch)))
+            patch = depth[y:y+patch_size, x:x+patch_size]
+            patch_depths.append(float(numpy.median(patch)))
 
-    return patch_depth
+    return patch_depths
 
-def correct_depth_img(depth_img, calibration_patch_depth, patch_size, margin):
-    current_patch_depth = calculate_patch_depths(depth_img, patch_size, margin)
-    correction = []
 
-    for current_depth, calibration_depth in zip(current_patch_depth, calibration_patch_depth):
-        correction.append(calibration_depth / current_depth)
+def min_depth_calibration(host=PI_HOST, port=PI_PORT, flip=False):
+    global min_depth
 
-    if len(correction) == 0:
-        return depth_img
+    depth, message = depth_calibration(host, port, flip)
 
-    return depth_img * float(numpy.median(correction))
+    if depth is None:
+        return False, message
+    if max_depth is not None and depth >= max_depth:
+        return False, "Min depth must be smaller than max depth."
 
-def calculate_face_depths(depth_img, face_rect, margin):
-    face_depths = []
+    min_depth = depth
 
-    for (x, y, w, h) in face_rect:
-        x0 = int(x + w * margin)
-        x1 = int(x + w * (1 - margin))
-        y0 = int(y + h * margin)
-        y1 = int(y + h * (1 - margin))
+    return True, "Min depth calibrated."
 
-        face_area = depth_img[y0:y1, x0:x1]
+def max_depth_calibration(host=PI_HOST, port=PI_PORT, flip=False):
+    global max_depth
 
-        if face_area.size == 0:
-            face_depths.append(None)
-        else:
-            face_depths.append(float(numpy.median(face_area)))
+    depth, message = depth_calibration(host, port, flip)
 
-    return face_depths
+    if depth is None:
+        return False, message
+    if min_depth is not None and depth <= min_depth:
+        return False, "Max depth must be larger than min depth."
+
+    max_depth = depth
+
+    return True, "Max depth calibrated."
+
+def depth_calibration(host, port, flip):
+    if calibration_patches is None:
+        return None, "Background is not calibrated."
+
+    frame_img = next(frames_from_pi(host, port))
+    face_centers, face_depths = process_frame_full(frame_img, flip)
+
+    if len(face_centers) != 1:
+        return None, "Exactly one person must be in frame."
+
+    return face_depths[0], "Depth calibrated."
+
+def is_calibrated():
+    return (
+        calibration_patches is not None
+        and min_depth is not None
+        and max_depth is not None
+    )
 
 
 def people_positions(host=PI_HOST, port=PI_PORT, flip=False):
-    if calibration_patch_depth is None:
+    if not is_calibrated():
         raise RuntimeError("Not calibrated.")
 
     frames = frames_from_pi(host, port)
     try:
         for frame_img in frames:
-            face_rects, face_centers, raw_depth = read_depth_frame(frame_img, flip)
+            face_centers, face_depths = process_frame_full(frame_img, flip)
 
-            corrected_depth_img = correct_depth_img(raw_depth, calibration_patch_depth, patch_size, patch_margin)
-            face_depths = calculate_face_depths(corrected_depth_img, face_rects, face_margin)
+            positions = normalize_positions(face_centers, face_depths, frame_img)
 
-            yield face_centers, face_depths
+            yield positions
 
     finally:
         frames.close()
