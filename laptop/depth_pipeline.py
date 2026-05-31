@@ -120,17 +120,24 @@ def normalize_positions(face_centers, face_depths, frame_img):
 def background_calibration(host=PI_HOST, port=PI_PORT, flip=False):
     global calibration_patches, min_depth, max_depth
 
-    frame_img = next(frames_from_pi(host, port))
-    raw_depth = process_frame_raw_depth(frame_img, flip)
+    frames = frames_from_pi(host, port)
 
-    if frame_contains_person(frame_img):
-        return False, "No person must be in frame."
+    try:
+        frame_img = next(frames)
 
-    calibration_patches = calculate_patch_depths(raw_depth)
-    min_depth = None
-    max_depth = None
+        raw_depth = process_frame_raw_depth(frame_img, flip)
 
-    return True, "Background calibrated."
+        if frame_contains_person(frame_img):
+            return False, "No person must be in frame."
+
+        calibration_patches = calculate_patch_depths(raw_depth)
+        min_depth = None
+        max_depth = None
+
+        return True, "Background calibrated."
+
+    finally:
+        frames.close()
 
 def calculate_patch_depths(depth):
     img_h, img_w = depth.shape[:2]
@@ -192,13 +199,20 @@ def depth_calibration(host, port, flip):
     if calibration_patches is None:
         return None, "Background is not calibrated."
 
-    frame_img = next(frames_from_pi(host, port))
-    face_centers, face_depths = process_frame_full(frame_img, flip)
+    frames = frames_from_pi(host, port)
 
-    if len(face_centers) != 1:
-        return None, "Exactly one person must be in frame."
+    try:
+        frame_img = next(frames)
 
-    return face_depths[0], "Depth calibrated."
+        face_centers, face_depths = process_frame_full(frame_img, flip)
+
+        if len(face_centers) != 1:
+            return None, "Exactly one person must be in frame."
+
+        return face_depths[0], "Depth calibrated."
+
+    finally:
+        frames.close()
 
 def is_calibrated():
     return (
