@@ -1,14 +1,15 @@
 import cv2
 import numpy
 from PIL import Image
+
 from transformers import pipeline
 
-from client import frames_from_pi, PI_HOST, PI_PORT
+from client import frames_from_pi
 
 
 face_cascade = cv2.CascadeClassifier("./models/frontalface.xml")
 
-pipe = pipeline(
+depth_pipe = pipeline(
     task='depth-estimation',
     model='depth-anything/Depth-Anything-V2-Metric-Indoor-Small-hf',
     #model='Intel/dpt-hybrid-midas',
@@ -23,11 +24,9 @@ patch_size = 16
 patch_margin = 0.08
 face_margin = 0.1
 
-def process_frame_raw_depth(frame_img, flip=False):
-    if flip:
-        frame_img = cv2.flip(frame_img, 1)
 
-    return depth_estimation(frame_img)
+def process_frame(frame_img):
+    raw_depth = depth_estimation(frame_img)
 
 def process_frame_full(frame_img, flip=False):
     raw_depth = process_frame_raw_depth(frame_img, flip)
@@ -61,7 +60,7 @@ def depth_estimation(img):
     pil_img = Image.fromarray(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
 
     # Process image with pipeline
-    result = pipe(pil_img)
+    result = depth_pipe(pil_img)
 
     # Normalized display depth
     #depth_img = numpy.array(result['depth'])
@@ -117,15 +116,15 @@ def normalize_positions(face_centers, face_depths, frame_img):
     return positions
 
 
-def background_calibration(host=PI_HOST, port=PI_PORT, flip=False):
+def background_calibration():
     global calibration_patches, min_depth, max_depth
 
-    frames = frames_from_pi(host, port)
+    frames = frames_from_pi()
 
     try:
         frame_img = next(frames)
 
-        raw_depth = process_frame_raw_depth(frame_img, flip)
+        raw_depth = depth_estimation(frame_img)
 
         if frame_contains_person(frame_img):
             return False, "No person must be in frame."
@@ -167,10 +166,10 @@ def calculate_patch_depths(depth):
     return patch_depths
 
 
-def min_depth_calibration(host=PI_HOST, port=PI_PORT, flip=False):
+def min_depth_calibration():
     global min_depth
 
-    depth, message = depth_calibration(host, port, flip)
+    depth, message = depth_calibration()
 
     if depth is None:
         return False, message
@@ -181,10 +180,10 @@ def min_depth_calibration(host=PI_HOST, port=PI_PORT, flip=False):
 
     return True, "Min depth calibrated."
 
-def max_depth_calibration(host=PI_HOST, port=PI_PORT, flip=False):
+def max_depth_calibration():
     global max_depth
 
-    depth, message = depth_calibration(host, port, flip)
+    depth, message = depth_calibration()
 
     if depth is None:
         return False, message
@@ -195,16 +194,16 @@ def max_depth_calibration(host=PI_HOST, port=PI_PORT, flip=False):
 
     return True, "Max depth calibrated."
 
-def depth_calibration(host, port, flip):
+def depth_calibration():
     if calibration_patches is None:
         return None, "Background is not calibrated."
 
-    frames = frames_from_pi(host, port)
+    frames = frames_from_pi()
 
     try:
         frame_img = next(frames)
 
-        face_centers, face_depths = process_frame_full(frame_img, flip)
+        face_centers, face_depths = process_frame(frame_img)
 
         if len(face_centers) != 1:
             return None, "Exactly one person must be in frame."
@@ -222,14 +221,15 @@ def is_calibrated():
     )
 
 
-def people_positions(host=PI_HOST, port=PI_PORT, flip=False):
+def people_positions():
     if not is_calibrated():
         raise RuntimeError("Not calibrated.")
 
-    frames = frames_from_pi(host, port)
+    frames = frames_from_pi()
+
     try:
         for frame_img in frames:
-            face_centers, face_depths = process_frame_full(frame_img, flip)
+            face_centers, face_depths = process_frame(frame_img)
 
             positions = normalize_positions(face_centers, face_depths, frame_img)
 
