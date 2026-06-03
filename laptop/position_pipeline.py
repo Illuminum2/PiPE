@@ -3,11 +3,12 @@ import numpy
 from PIL import Image
 
 from transformers import pipeline
+from ultralytics import YOLO
 
 from client import frames_from_pi
 
 
-face_cascade = cv2.CascadeClassifier("./models/frontalface.xml")
+head_model = YOLO("./models/head.mlpackage")
 
 depth_pipe = pipeline(
     task='depth-estimation',
@@ -28,10 +29,7 @@ face_margin = 0.1
 def process_frame(frame_img):
     raw_depth = depth_estimation(frame_img)
 
-def process_frame_full(frame_img, flip=False):
-    raw_depth = process_frame_raw_depth(frame_img, flip)
-
-    face_rects, face_centers = detect_faces(frame_img)
+    face_rects, face_centers = detect_heads(frame_img)
     corrected_depth = correct_depth(raw_depth)
 
     face_depths = calculate_face_depths(corrected_depth, face_rects)
@@ -39,20 +37,25 @@ def process_frame_full(frame_img, flip=False):
     return face_centers, face_depths
 
 
-# Detect faces with haar cascades
-def detect_faces(img):
-    face_img = img.copy()
+# Detect faces with custom YOLO model
+# https://docs.ultralytics.com/usage/python#predict
+# https://docs.ultralytics.com/modes/predict#inference-arguments
+def detect_heads(img, conf_thresh=0.5):
+    results = head_model(source=img, conf=conf_thresh, imgsz=640)[0] # Get first (and only) image
 
-    face_rects = face_cascade.detectMultiScale(face_img, scaleFactor=1.2, minNeighbors=7)
+    head_rects = []
+    head_centers = []
 
-    face_centers = []
-    for (x, y, w, h) in face_rects:
-        face_centers.append((x + w / 2, y + h / 2))
+    for box in results.boxes:
+        x, y, w, h = box.xywh[0]
 
-    return face_rects, face_centers
+        head_rects.append([int(x - w/2), int(y - h/2), int(x + w/2), int(y + h/2)]) # x and y from xywh are center
+        head_centers.append((int(x), int(y)))
+
+    return head_rects, head_centers
 
 def frame_contains_person(frame_img):
-    return len(detect_faces(frame_img)[0]) > 0
+    return len(detect_heads(frame_img)[0]) > 0
 
 # Estimate monocular depth from frame
 def depth_estimation(img):
