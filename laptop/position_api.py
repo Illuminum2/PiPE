@@ -25,10 +25,21 @@ async def calibrate_min_distance():
 
     return calibration_result(calibrated, message)
 
+@app.post("/api/coordinates/calibrate/min/{min_distance}")
+async def set_min(min_distance: float):
+    calibrated, message = await asyncio.to_thread(set_min_distance, min_distance)
+
+    return calibration_result(calibrated, message)
 
 @app.post("/api/coordinates/calibrate/max")
 async def calibrate_max_distance():
     calibrated, message = await asyncio.to_thread(max_distance_calibration)
+
+    return calibration_result(calibrated, message)
+
+@app.post("/api/coordinates/calibrate/max/{max_distance}")
+async def set_max(max_distance: float):
+    calibrated, message = await asyncio.to_thread(set_max_distance, max_distance)
 
     return calibration_result(calibrated, message)
 

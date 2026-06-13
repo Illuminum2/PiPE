@@ -64,6 +64,28 @@ def normalize_positions(head_centers, head_distances, frame_img):
     return positions
 
 
+def set_min_distance(distance):
+    global min_distance
+
+    if distance is None:
+        return False, "Min distance must be set."
+    if max_distance is not None and distance >= max_distance:
+        return False, "Min distance must be smaller than max distance."
+
+    min_distance = distance
+    return True, f"Min distance set to {min_distance}m."
+
+def set_max_distance(distance):
+    global max_distance
+
+    if distance is None:
+        return False, "Max distance must be set."
+    if min_distance is not None and distance <= min_distance:
+        return False, "Max distance must be smaller than max distance."
+
+    max_distance = distance
+    return True, f"Max distance set to {max_distance}m."
+
 def min_distance_calibration():
     global min_distance
 
