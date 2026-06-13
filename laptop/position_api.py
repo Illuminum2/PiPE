@@ -3,8 +3,8 @@ from fastapi.websockets import WebSocketDisconnect
 import asyncio
 import time
 
-from depth_pipeline import background_calibration, min_depth_calibration, max_depth_calibration
-from depth_pipeline import is_calibrated, people_positions
+from position_pipeline import min_distance_calibration, max_distance_calibration, set_min_distance, set_max_distance
+from position_pipeline import is_calibrated, people_positions
 
 
 app = FastAPI()
@@ -20,15 +20,15 @@ async def calibrate_coordinates():
 
 
 @app.post("/api/coordinates/calibrate/min")
-async def calibrate_min_depth():
-    calibrated, message = await asyncio.to_thread(min_depth_calibration)
+async def calibrate_min_distance():
+    calibrated, message = await asyncio.to_thread(min_distance_calibration)
 
     return calibration_result(calibrated, message)
 
 
 @app.post("/api/coordinates/calibrate/max")
-async def calibrate_max_depth():
-    calibrated, message = await asyncio.to_thread(max_depth_calibration)
+async def calibrate_max_distance():
+    calibrated, message = await asyncio.to_thread(max_distance_calibration)
 
     return calibration_result(calibrated, message)
 
@@ -36,24 +36,36 @@ async def calibrate_max_depth():
 @app.websocket("/api/coordinates/stream")
 async def websocket_coordinates(websocket: WebSocket):
     await websocket.accept()
-    positions = people_positions()
+    position_stream = None
 
     try:
         while True:
-            # https://stackoverflow.com/a/65716963
-            positions = await asyncio.to_thread(next, positions)
-            data = positions_to_data(positions)
+            if not is_calibrated():
+                await asyncio.sleep(0.25)
+                continue
 
-            await websocket.send_json(data)
+            position_stream = people_positions()
+
+            try:
+                while True:
+                    # https://stackoverflow.com/a/65716963
+                    positions = await asyncio.to_thread(next, position_stream)
+                    data = positions_to_data(positions)
+
+                    await websocket.send_json(data)
+            except RuntimeError as error:
+                position_stream.close()
+                position_stream = None
+
+                # await websocket.send_json({
+                #     'message': str(error)
+                # })
 
     except WebSocketDisconnect:
         pass
-    except RuntimeError as error:
-        await websocket.send_json({
-            'message': str(error)
-        })
     finally:
-        positions.close()
+        if position_stream is not None:
+            position_stream.close()
 
 
 def calibration_result(calibrated, message):
