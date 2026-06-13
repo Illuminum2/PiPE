@@ -6,7 +6,7 @@ import argparse
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--host", default="10.55.0.1", help="pi host")
+    parser.add_argument("--host", default="*", help="address to bind")
     parser.add_argument("--port", type=int, default=5555, help="pi port")
     parser.add_argument("--width", type=int, default=640, help="camera width")
     parser.add_argument("--height", type=int, default=360, help="camera height")

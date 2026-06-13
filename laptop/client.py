@@ -3,7 +3,7 @@ import numpy as np
 import zmq
 
 
-PI_HOST = "10.55.0.1"
+PI_HOST = "10.12.194.1"
 PI_PORT = 5555
 
 
