@@ -8,43 +8,34 @@ from position_pipeline import is_calibrated, people_positions
 
 
 app = FastAPI()
-address = "10.10.0.85:8000"
 
 
-
-@app.post("/api/coordinates/calibrate/background")
-async def calibrate_coordinates():
-    calibrated, message = await asyncio.to_thread(background_calibration)
-
-    return calibration_result(calibrated, message)
-
-
-@app.post("/api/coordinates/calibrate/min")
+@app.post("/coordinates/calibrate/min")
 async def calibrate_min_distance():
     calibrated, message = await asyncio.to_thread(min_distance_calibration)
 
     return calibration_result(calibrated, message)
 
-@app.post("/api/coordinates/calibrate/min/{min_distance}")
+@app.post("/coordinates/calibrate/min/{min_distance}")
 async def set_min(min_distance: float):
     calibrated, message = await asyncio.to_thread(set_min_distance, min_distance)
 
     return calibration_result(calibrated, message)
 
-@app.post("/api/coordinates/calibrate/max")
+@app.post("/coordinates/calibrate/max")
 async def calibrate_max_distance():
     calibrated, message = await asyncio.to_thread(max_distance_calibration)
 
     return calibration_result(calibrated, message)
 
-@app.post("/api/coordinates/calibrate/max/{max_distance}")
+@app.post("/coordinates/calibrate/max/{max_distance}")
 async def set_max(max_distance: float):
     calibrated, message = await asyncio.to_thread(set_max_distance, max_distance)
 
     return calibration_result(calibrated, message)
 
 
-@app.websocket("/api/coordinates/stream")
+@app.websocket("/coordinates/stream")
 async def websocket_coordinates(websocket: WebSocket):
     await websocket.accept()
     position_stream = None
