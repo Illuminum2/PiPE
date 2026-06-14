@@ -1,0 +1,4 @@
+cd "$(dirname "$0")/frontend/Frontend"
+
+npm install
+npm run build
