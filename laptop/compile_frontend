@@ -1,4 +1,4 @@
-cd "$(dirname "$0")/frontend/Frontend"
+cd "$(dirname "$0")/frontend"
 
 npm install
 npm run build
