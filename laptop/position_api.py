@@ -46,7 +46,8 @@ async def read_positions():
                 #     'message': str(error)
                 # })
     finally:
-        position_stream.close()
+        if position_stream is not None:
+            position_stream.close()
         position_task = None
 
 
