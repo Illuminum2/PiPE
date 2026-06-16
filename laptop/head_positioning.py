@@ -7,19 +7,15 @@ import math
 
 from dataclasses import dataclass
 
-from unicodedata import east_asian_width
-
 # Custom head detection model
 head_model = YOLO("./models/head.mlpackage")
 
-# https://github.com/PINTO0309/HeadPoseEstimation-WHENet-yolov4-onnx-openvino
-whenet_model = ct.models.MLModel("./models/whenet.mlpackage")
+# https://github.com/thohemp/6DRepNet360
+sixdrepnet_model = ct.models.MLModel("./models/6DRepNet360.mlpackage")
 
-# https://github.com/Ascend-Research/HeadPoseEstimation-WHENet/blob/master/whenet.py
-whenet_mean = numpy.array([0.485, 0.456, 0.406], dtype=numpy.float32)
-whenet_std = numpy.array([0.229, 0.224, 0.225], dtype=numpy.float32)
-whenet_idx = numpy.array([idx for idx in range(66)], dtype=numpy.float32)
-whenet_idx_yaw = numpy.array([idx for idx in range(120)], dtype=numpy.float32)
+# https://github.com/thohemp/6DRepNet360/blob/master/sixdrepnet360/test.py
+sixdrepnet_mean = numpy.array([0.485, 0.456, 0.406], dtype=numpy.float32)
+sixdrepnet_std = numpy.array([0.229, 0.224, 0.225], dtype=numpy.float32)
 
 
 # ********************************************
@@ -84,33 +80,23 @@ def clip_to_bbox(img, x0, y0, x1, y1):
 # Head view direction estimation
 # ******************************
 
-# https://github.com/Ascend-Research/HeadPoseEstimation-WHENet/blob/master/demo.py
-# https://github.com/Ascend-Research/HeadPoseEstimation-WHENet/blob/master/whenet.py
+# https://github.com/thohemp/6DRepNet360/blob/master/sixdrepnet360/test.py
+# https://github.com/thohemp/6DRepNet360/blob/master/sixdrepnet360/utils.py
 def estimate_head_direction(head_img):
-    input_img = cv2.cvtColor(head_img, cv2.COLOR_BGR2RGB)
-    input_img = cv2.resize(input_img, (224, 224))
+    #input_img = cv2.cvtColor(head_img, cv2.COLOR_BGR2RGB)
+    input_img = head_img.copy()
+    input_img = cv2.resize(input_img, (256, 256))
+    input_img = input_img[16:240, 16:240]
     input_img = numpy.expand_dims(input_img, axis=0)
     input_img = input_img / 255
-    input_img = (input_img - whenet_mean) / whenet_std
+    input_img = (input_img - sixdrepnet_mean) / sixdrepnet_std
+    input_img = numpy.transpose(input_img, (0, 3, 1, 2))
 
     # https://apple.github.io/coremltools/docs-guides/source/model-prediction.html#image-prediction
-    # https://github.com/PINTO0309/HeadPoseEstimation-WHENet-yolov4-onnx-openvino/blob/main/convert_script.txt
-    result = whenet_model.predict({"input_1": input_img}) # Model requires input_1
+    result = sixdrepnet_model.predict({"input": input_img})
+    pitch, yaw, roll = result["euler"][0]
 
-    # https://github.com/PINTO0309/HeadPoseEstimation-WHENet-yolov4-onnx-openvino/blob/main/convert_script.txt#L177
-    yaw_predicted = softmax(result["Identity"][0])
-    pitch_predicted = softmax(result["Identity_1"][0])
-    roll_predicted = softmax(result["Identity_2"][0])
-    yaw = float(numpy.sum(yaw_predicted * whenet_idx_yaw) * 3 - 180)
-    pitch = float(numpy.sum(pitch_predicted * whenet_idx) * 3 - 99)
-    roll = float(numpy.sum(roll_predicted * whenet_idx) * 3 - 99)
-
-    return EulerAngles(yaw, pitch, roll)
-
-# https://medium.com/@amit25173/understanding-softmax-with-numpy-b7273d8ab205
-def softmax(x):
-    exp_x = numpy.exp(x - numpy.max(x))
-    return exp_x / numpy.sum(exp_x)
+    return EulerAngles(float(-yaw), float(pitch), float(roll))
 
 
 # *******************************************************
@@ -159,10 +145,11 @@ def get_rotation_matrix(yaw, pitch, roll):
     cr, sr = math.cos(roll), math.sin(roll)
 
     # https://en.wikipedia.org/wiki/Rotation_matrix#General_3D_rotations
+    # 6DRepNet returns rotations in xyz order
     return numpy.array([
-        [cy*cp, cy*sp*sr - sy*cr, cy*sp*cr + sy*sr],
-        [sy*cp, sy*sp*sr + cy*cr, sy*sp*cr - cy*sr],
-        [-sp, cp*sr, cp*cr]
+        [cy*cr, -cy*sr, sy],
+        [cp*sr + sp*sy*cr, cp*cr - sp*sy*sr, -sp*cy],
+        [sp*sr - cp*sy*cr, sp*cr + cp*sy*sr, cp*cy]
     ])
 
 
