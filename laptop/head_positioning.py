@@ -11,7 +11,7 @@ from dataclasses import dataclass
 head_model = YOLO("./models/head.mlpackage", task="detect")
 
 # https://github.com/thohemp/6DRepNet360
-sixdrepnet_model = ct.models.MLModel("./models/6DRepNet360.mlpackage")
+sixdrepnet_model = ct.models.MLModel("./models/6DRepNet360.mlpackage", compute_units=ct.ComputeUnit.CPU_AND_NE)
 
 # https://github.com/thohemp/6DRepNet360/blob/master/sixdrepnet360/test.py
 sixdrepnet_mean = numpy.array([0.485, 0.456, 0.406], dtype=numpy.float32)
