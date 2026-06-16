@@ -1,57 +1,18 @@
-from ultralytics import YOLO
-
 from client import frames_from_pi
-from head_distance import head_distance_from_frame
-
-
-head_model = YOLO("./models/head.mlpackage")
+from head_positioning import estimate_head_positions
 
 
 min_distance = None
 max_distance = None
 
 
-def process_frame(frame_img):
-    head_rects, head_centers = detect_heads(frame_img)
-    head_distances = calculate_head_distances(frame_img, head_rects)
-
-    return head_centers, head_distances
-
-
-# Detect heads with custom YOLO model
-# https://docs.ultralytics.com/usage/python#predict
-# https://docs.ultralytics.com/modes/predict#inference-arguments
-def detect_heads(img, conf_thresh=0.5):
-    results = head_model(source=img, conf=conf_thresh, imgsz=640)[0] # Get first (and only) image
-
-    head_rects = []
-    head_centers = []
-
-    for box in results.boxes:
-        x, y, w, h = box.xywh[0]
-
-        head_rects.append([int(x - w/2), int(y - h/2), int(x + w/2), int(y + h/2)]) # x and y from xywh are center
-        head_centers.append((int(x), int(y)))
-
-    return head_rects, head_centers
-
-
-def calculate_head_distances(frame_img, head_rects):
-    head_distances = []
-    focal_length = frame_img.shape[1] # Temporary focal length
-
-    for head_rect in head_rects:
-        distance = head_distance_from_frame(frame_img, head_rect, focal_length)
-        head_distances.append(distance)
-
-    return head_distances
-
-
-def normalize_positions(head_centers, head_distances, frame_img):
+def normalize_positions(heads, frame_img):
     img_h, img_w = frame_img.shape[:2]
     positions = []
 
-    for (x, y), z in zip(head_centers, head_distances):
+    for h in heads:
+        x, y, z = h.position.x, h.position.y, h.position.z
+
         if z is None or z < min_distance or z > max_distance:
             continue
 
@@ -121,14 +82,14 @@ def distance_calibration():
     try:
         frame_img = next(frames)
 
-        head_centers, head_distances = process_frame(frame_img)
+        heads = estimate_head_positions(frame_img, 500)
 
-        if len(head_centers) != 1:
+        if len(heads) != 1:
             return None, "Exactly one person must be in frame."
-        if head_distances[0] is None:
+        if heads[0].position.z is None:
             return None, "Head distance could not be calculated."
 
-        return head_distances[0], "Distance calibrated."
+        return heads[0].position.z, "Distance calibrated."
 
     finally:
         frames.close()
@@ -148,9 +109,8 @@ def people_positions():
 
     try:
         for frame_img in frames:
-            head_centers, head_distances = process_frame(frame_img)
-
-            positions = normalize_positions(head_centers, head_distances, frame_img)
+            heads = estimate_head_positions(frame_img, 500)
+            positions = normalize_positions(heads, frame_img)
 
             yield positions
 
