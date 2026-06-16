@@ -8,7 +8,7 @@ import math
 from dataclasses import dataclass
 
 # Custom head detection model
-head_model = YOLO("./models/head.mlpackage")
+head_model = YOLO("./models/head.mlpackage", task="detect")
 
 # https://github.com/thohemp/6DRepNet360
 sixdrepnet_model = ct.models.MLModel("./models/6DRepNet360.mlpackage")
@@ -55,7 +55,7 @@ class Head:
 # https://docs.ultralytics.com/usage/python#predict
 # https://docs.ultralytics.com/modes/predict#inference-arguments
 def estimate_head_bounding_boxes(img, conf_thresh=0.6):
-    results = head_model(source=img, conf=conf_thresh, imgsz=640)[0] # Get first (and only) image
+    results = head_model(source=img, conf=conf_thresh, imgsz=640, verbose=False)[0] # Get first (and only) image
 
     bboxes = []
 
