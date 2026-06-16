@@ -157,18 +157,42 @@ def get_rotation_matrix(yaw, pitch, roll):
 # Position estimation using the pinhole camera model
 # **************************************************
 
-def estimate_head_positions(img, focal_length):
+# https://en.wikipedia.org/wiki/Pinhole_camera_model
+# https://mayavan95.medium.com/3d-position-estimation-of-a-known-object-using-a-single-camera-7a82b37b326b
+def estimate_head_positions(frame):
+    img = frame.img.copy()
+    img_h, img_w = img.shape[:2]
+
+    fx, fy = pixel_focal_lengths(frame)
+
+    cx = img_w / 2
+    cy = img_h / 2
+
     heads = heads_from_frame(img)
 
     for h in heads:
         e_bbox = calculate_physical_bounding_box(h.angles)
 
-        # https://en.wikipedia.org/wiki/Pinhole_camera_model
-        width_factor = focal_length * (e_bbox.width / h.bbox.width)
-        height_factor = focal_length * (e_bbox.height / h.bbox.height)
+        width_factor = (fx * e_bbox.width) / h.bbox.width
+        height_factor = (fy * e_bbox.height) / h.bbox.height
 
         z = (width_factor + height_factor) / 2
 
-        h.position = Vec3D(h.bbox.x + h.bbox.width/2, h.bbox.y + h.bbox.height/2, z)
+        x = ((h.bbox.x + h.bbox.width/2 - cx) * z) / fx
+        y = ((h.bbox.y + h.bbox.height/2 - cy) * z) / fy
+
+        h.position = Vec3D(x, y, z)
 
     return heads
+
+# https://gist.github.com/Shrinks99/04ecc04da478ee6bd4a53c935971e3c5
+def pixel_focal_lengths(frame):
+    img_h, img_w = frame.img.shape[:2]
+
+    sensor_width = frame.unit_cell_size[0] / 1000000 * img_w
+    sensor_height = frame.unit_cell_size[1] / 1000000 * img_h
+
+    return (
+        frame.focal_length / sensor_width * img_w,
+        frame.focal_length / sensor_height * img_h
+    )

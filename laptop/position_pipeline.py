@@ -11,14 +11,14 @@ def normalize_positions(heads, frame_img):
     positions = []
 
     for h in heads:
-        x, y, z = h.position.x, h.position.y, h.position.z
+        z = h.position.z
 
         if z is None or z < min_distance or z > max_distance:
             continue
 
         positions.append((
-            x / img_w,
-            y / img_h,
+            (h.bbox.x + h.bbox.width / 2) / img_w,
+            (h.bbox.y + h.bbox.height / 2) / img_h,
             (z - min_distance) / (max_distance - min_distance)
         ))
 
@@ -80,9 +80,9 @@ def distance_calibration():
     frames = frames_from_pi()
 
     try:
-        frame_img = next(frames)
+        frame = next(frames)
 
-        heads = estimate_head_positions(frame_img, 500)
+        heads = estimate_head_positions(frame)
 
         if len(heads) != 1:
             return None, "Exactly one person must be in frame."
@@ -108,9 +108,9 @@ def people_positions():
     frames = frames_from_pi()
 
     try:
-        for frame_img in frames:
-            heads = estimate_head_positions(frame_img, 500)
-            positions = normalize_positions(heads, frame_img)
+        for frame in frames:
+            heads = estimate_head_positions(frame)
+            positions = normalize_positions(heads, frame.img)
 
             yield positions
 
